@@ -1,0 +1,52 @@
+name: Update Books Catalog
+
+on:
+  push:
+    paths:
+      - 'books/**'
+      - '.github/workflows/update-books.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Scan books folder and generate books.json
+        run: |
+          python3 - << 'EOF'
+          import glob, html, json, os, re
+
+          books = []
+          for path in sorted(glob.glob("books/*.html")):
+              filename = os.path.basename(path)
+              with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                  head = f.read(4096)
+
+              title_m = re.search(r"<title>(.*?)</title>", head, re.I | re.S)
+              cat_m = re.search(r'<meta\s+name=["\']book-category["\']\s+content=["\'](.*?)["\']', head, re.I)
+
+              title = html.unescape(title_m.group(1).strip()) if title_m else os.path.splitext(filename)[0]
+              category = html.unescape(cat_m.group(1).strip()) if cat_m else "Uncategorized"
+
+              books.append({
+                  "title": title,
+                  "category": category,
+                  "file": filename
+              })
+
+          with open("books.json", "w", encoding="utf-8") as f:
+              json.dump(books, f, ensure_ascii=False, indent=2)
+          EOF
+
+      - name: Commit and push books.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add books.json
+          git diff --staged --quiet || (git commit -m "Auto-update books.json" && git push)
