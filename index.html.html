@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audiobooks 有聲電子書架</title>
+<style>
+  :root {
+    --bg: #f6f3ec;
+    --card: #fffdf9;
+    --text: #2c2a29;
+    --muted: #6b665f;
+    --accent: #b45309;
+    --accent-bg: #fef3c7;
+    --border: #e5dfd3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  header {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 24px 20px;
+    text-align: center;
+  }
+  header h1 {
+    margin: 0 0 6px 0;
+    font-size: 26px;
+    color: var(--text);
+  }
+  header p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .container {
+    max-width: 1080px;
+    margin: 24px auto;
+    padding: 0 16px 60px;
+  }
+  .toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .search-box {
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 10px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    font-size: 15px;
+    outline: none;
+  }
+  .search-box:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-bg);
+  }
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+  .tab-btn {
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--muted);
+    padding: 7px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.15s;
+  }
+  .tab-btn:hover { background: #efe9dc; color: var(--text); }
+  .tab-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 16px;
+  }
+  .book-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    text-decoration: none;
+    color: inherit;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+  }
+  .book-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.06);
+    border-color: var(--accent);
+  }
+  .badge {
+    display: inline-block;
+    align-self: flex-start;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-bg);
+    padding: 3px 10px;
+    border-radius: 999px;
+    margin-bottom: 12px;
+  }
+  .book-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0 0 12px 0;
+    line-height: 1.4;
+  }
+  .book-action {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .book-card:hover .book-action { color: var(--accent); }
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 48px 16px;
+    font-size: 15px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📚 Audiobooks 有聲電子書架</h1>
+  <p>點擊任一讀本即可開始有聲閱讀與單字點讀</p>
+</header>
+
+<div class="container">
+  <div class="toolbar">
+    <input id="inpSearch" class="search-box" type="search" placeholder="🔍 搜尋書名或分類...">
+    <div id="categoryTabs" class="tabs"></div>
+  </div>
+  <div id="bookGrid" class="grid"></div>
+  <div id="emptyState" class="empty" style="display:none;">目前尚無符合條件的讀本。</div>
+</div>
+
+<script>
+const FIXED_ORDER = [
+  "Kindergarten",
+  "Elementary (Lower)",
+  "Elementary (Middle)",
+  "Elementary (Upper)",
+  "Junior High",
+  "Senior High"
+];
+
+let allBooks = [];
+let activeCategory = "All";
+
+const categoryTabs = document.getElementById("categoryTabs");
+const bookGrid = document.getElementById("bookGrid");
+const emptyState = document.getElementById("emptyState");
+const inpSearch = document.getElementById("inpSearch");
+
+function getSortedCategories(books) {
+  const present = new Set(books.map(b => b.category || "Uncategorized"));
+  const ordered = FIXED_ORDER.filter(c => present.has(c));
+  const others = [...present].filter(c => !FIXED_ORDER.includes(c)).sort();
+  return ["All", ...ordered, ...others];
+}
+
+function renderTabs() {
+  const cats = getSortedCategories(allBooks);
+  categoryTabs.innerHTML = "";
+  cats.forEach(cat => {
+    const count = cat === "All"
+      ? allBooks.length
+      : allBooks.filter(b => (b.category || "Uncategorized") === cat).length;
+
+    const btn = document.createElement("button");
+    btn.className = "tab-btn" + (cat === activeCategory ? " active" : "");
+    btn.textContent = `${cat} (${count})`;
+    btn.addEventListener("click", () => {
+      activeCategory = cat;
+      renderTabs();
+      renderBooks();
+    });
+    categoryTabs.appendChild(btn);
+  });
+}
+
+function renderBooks() {
+  const kw = inpSearch.value.trim().toLowerCase();
+  const filtered = allBooks.filter(b => {
+    const matchCat = activeCategory === "All" || (b.category || "Uncategorized") === activeCategory;
+    const matchKw = !kw || b.title.toLowerCase().includes(kw) || (b.category || "").toLowerCase().includes(kw);
+    return matchCat && matchKw;
+  });
+
+  bookGrid.innerHTML = "";
+  if (filtered.length === 0) {
+    emptyState.style.display = "block";
+    return;
+  }
+  emptyState.style.display = "none";
+
+  filtered.forEach(b => {
+    const a = document.createElement("a");
+    a.className = "book-card";
+    a.href = `books/${encodeURIComponent(b.file)}`;
+    a.innerHTML = `
+      <div>
+        <span class="badge">${b.category || "Uncategorized"}</span>
+        <h2 class="book-title">${b.title}</h2>
+      </div>
+      <div class="book-action">開始閱讀 ▶</div>
+    `;
+    bookGrid.appendChild(a);
+  });
+}
+
+inpSearch.addEventListener("input", renderBooks);
+
+fetch("books.json?t=" + Date.now())
+  .then(res => {
+    if (!res.ok) throw new Error("尚未產生書目檔");
+    return res.json();
+  })
+  .then(data => {
+    allBooks = Array.isArray(data) ? data : [];
+    renderTabs();
+    renderBooks();
+  })
+  .catch(() => {
+    emptyState.textContent = "尚無讀本，請將製作好的 .html 檔上傳至 books/ 資料夾。";
+    emptyState.style.display = "block";
+  });
+</script>
+</body>
+</html>
